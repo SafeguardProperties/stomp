@@ -261,7 +261,7 @@ func processLoop(c *Conn, writer *frame.Writer) {
 		select {
 		case <-readTimeoutChannel:
 			// read timeout, close the connection
-			err := newErrorMessage("read timeout")
+			err := ErrReadTimeout
 			sendError(channels, err)
 			return
 
@@ -284,7 +284,7 @@ func processLoop(c *Conn, writer *frame.Writer) {
 			}
 
 			if !ok {
-				err := newErrorMessage("connection closed")
+				err := ErrConnectionClosed
 				sendError(channels, err)
 				return
 			}
@@ -708,13 +708,13 @@ func (c *Conn) createAckNackFrame(msg *Message, ack bool) (*frame.Frame, error) 
 		if messageId, ok := msg.Header.Contains(frame.MessageId); ok {
 			f.Header.Add(frame.MessageId, messageId)
 		} else {
-			return nil, missingHeader(frame.MessageId)
+			return nil, ErrMissingMessageId
 		}
 	case V12:
 		if ack, ok := msg.Header.Contains(frame.Ack); ok {
 			f.Header.Add(frame.Id, ack)
 		} else {
-			return nil, missingHeader(frame.Ack)
+			return nil, ErrMissingAck
 		}
 	}
 

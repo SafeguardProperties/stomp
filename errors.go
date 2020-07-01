@@ -18,6 +18,10 @@ var (
 	ErrAlreadyClosed         = newErrorMessage("connection already closed")
 	ErrMsgSendTimeout        = newErrorMessage("msg send timeout")
 	ErrNilOption             = newErrorMessage("nil option")
+	ErrReadTimeout           = newErrorMessage("read timeout")
+	ErrConnectionClosed      = newErrorMessage("connection closed")
+	ErrMissingMessageId      = newErrorMessage("missing header: " + frame.MessageId)
+	ErrMissingAck            = newErrorMessage("missing header: " + frame.Ack)
 )
 
 // StompError implements the Error interface, and provides
@@ -29,10 +33,6 @@ type Error struct {
 
 func (e Error) Error() string {
 	return e.Message
-}
-
-func missingHeader(name string) Error {
-	return newErrorMessage("missing header: " + name)
 }
 
 func newErrorMessage(msg string) Error {
