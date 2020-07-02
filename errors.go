@@ -20,6 +20,7 @@ var (
 	ErrNilOption             = newErrorMessage("nil option")
 	ErrReadTimeout           = newErrorMessage("read timeout")
 	ErrConnectionClosed      = newErrorMessage("connection closed")
+	ErrErrorFrame            = newErrorMessage("Errored Frame")
 	ErrMissingMessageId      = newErrorMessage("missing header: " + frame.MessageId)
 	ErrMissingAck            = newErrorMessage("missing header: " + frame.Ack)
 )

@@ -76,7 +76,10 @@ func (s *Subscription) Unsubscribe(opts ...func(*frame.Frame) error) error {
 		}
 	}
 
-	s.conn.sendFrame(f)
+	err := s.conn.sendFrame(f)
+	if err != nil {
+		log.Printf("failed to send frame in unsubscribe")
+	}
 
 	// UNSUBSCRIBE is a bit weird in that it is tagged with a "receipt" header
 	// on the I/O goroutine, so the above call to sendFrame() will not wait
@@ -135,50 +138,62 @@ func (s *Subscription) readLoop(ch chan *frame.Frame) {
 			return
 		}
 
-		if f.Command == frame.MESSAGE {
-			destination := f.Header.Get(frame.Destination)
-			contentType := f.Header.Get(frame.ContentType)
-			msg := &Message{
-				Destination:  destination,
-				ContentType:  contentType,
-				Conn:         s.conn,
-				Subscription: s,
-				Header:       f.Header,
-				Body:         f.Body,
-			}
-			s.C <- msg
-		} else if f.Command == frame.ERROR {
-			state := atomic.LoadInt32(&s.state)
-			if state == subStateActive || state == subStateClosing {
-				message, _ := f.Header.Contains(frame.Message)
-				text := fmt.Sprintf("Subscription %s: %s: ERROR message:%s",
-					s.id,
-					s.destination,
-					message)
-				log.Println(text)
-				contentType := f.Header.Get(frame.ContentType)
-				msg := &Message{
-					Err: &Error{
-						Message: f.Header.Get(frame.Message),
-						Frame:   f,
-					},
-					ContentType:  contentType,
-					Conn:         s.conn,
-					Subscription: s,
-					Header:       f.Header,
-					Body:         f.Body,
-				}
-				s.closeChannel(msg)
-			}
+		switch f.Command {
+		case frame.MESSAGE:
+			s.handleMessage(f)
+		case frame.ERROR:
+			s.handleError(f)
 			return
-		} else if f.Command == frame.RECEIPT {
-			state := atomic.LoadInt32(&s.state)
-			if state == subStateActive || state == subStateClosing {
-				s.closeChannel(nil)
-			}
+		case frame.RECEIPT:
+			s.handleReceipt(f)
 			return
-		} else {
+		default:
 			log.Printf("Subscription %s: %s: unsupported frame type: %+v\n", s.id, s.destination, f)
 		}
+
+	}
+}
+
+func (s *Subscription) handleMessage(f *frame.Frame) {
+	msg := &Message{
+		Destination:  f.Header.Get(frame.Destination),
+		ContentType:  f.Header.Get(frame.ContentType),
+		Conn:         s.conn,
+		Subscription: s,
+		Header:       f.Header,
+		Body:         f.Body,
+	}
+	s.C <- msg
+}
+
+func (s *Subscription) handleError(f *frame.Frame) {
+	state := atomic.LoadInt32(&s.state)
+	if state == subStateActive || state == subStateClosing {
+		message, _ := f.Header.Contains(frame.Message)
+		text := fmt.Sprintf("Subscription %s: %s: ERROR message:%s",
+			s.id,
+			s.destination,
+			message)
+		log.Println(text)
+		contentType := f.Header.Get(frame.ContentType)
+		msg := &Message{
+			Err: &Error{
+				Message: f.Header.Get(frame.Message),
+				Frame:   f,
+			},
+			ContentType:  contentType,
+			Conn:         s.conn,
+			Subscription: s,
+			Header:       f.Header,
+			Body:         f.Body,
+		}
+		s.closeChannel(msg)
+	}
+}
+
+func (s *Subscription) handleReceipt(f *frame.Frame) {
+	state := atomic.LoadInt32(&s.state)
+	if state == subStateActive || state == subStateClosing {
+		s.closeChannel(nil)
 	}
 }

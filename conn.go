@@ -2,6 +2,7 @@ package stomp
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -54,7 +55,9 @@ func Dial(network, addr string, opts ...func(*Conn) error) (*Conn, error) {
 
 	host, _, err := net.SplitHostPort(c.RemoteAddr().String())
 	if err != nil {
-		c.Close()
+		if innerErr := c.Close(); innerErr != nil {
+			return nil, fmt.Errorf("failed to close connect: %w, original error: %v", innerErr, err)
+		}
 		return nil, err
 	}
 
@@ -246,7 +249,11 @@ func processLoop(c *Conn, writer *frame.Writer) {
 	var writeTimeoutChannel <-chan time.Time
 	var writeTimer *time.Timer
 
-	defer c.MustDisconnect()
+	defer func() {
+		if err := c.MustDisconnect(); err != nil {
+			log.Printf("Failed to disconnect: %v", err)
+		}
+	}()
 
 	for {
 		if c.readTimeout > 0 && readTimer == nil {
@@ -318,8 +325,9 @@ func processLoop(c *Conn, writer *frame.Writer) {
 				c.closeMutex.Lock()
 				defer c.closeMutex.Unlock()
 				c.closed = true
-				c.conn.Close()
-
+				if err := c.tryCloseConn(ErrErrorFrame); err != nil {
+					// We do not need extra log.
+				}
 				return
 
 			case frame.MESSAGE:
@@ -374,9 +382,9 @@ func processLoop(c *Conn, writer *frame.Writer) {
 
 // Send an error to all receipt channels.
 func sendError(m map[string]chan *frame.Frame, err error) {
-	frame := frame.New(frame.ERROR, frame.Message, err.Error())
+	f := frame.New(frame.ERROR, frame.Message, err.Error())
 	for _, ch := range m {
-		ch <- frame
+		ch <- f
 	}
 }
 
@@ -512,6 +520,10 @@ func createSendFrame(destination, contentType string, body []byte, opts []func(*
 	return f, nil
 }
 
+func (c *Conn) IsClosed() bool {
+	return c.closed
+}
+
 func (c *Conn) sendFrame(f *frame.Frame) error {
 	// Lock our mutex, but don't close it via defer
 	// If the frame requests a receipt then we want to release the lock before
@@ -519,8 +531,7 @@ func (c *Conn) sendFrame(f *frame.Frame) error {
 	c.closeMutex.Lock()
 	if c.closed {
 		c.closeMutex.Unlock()
-		c.conn.Close()
-		return ErrClosedUnexpectedly
+		return c.tryCloseConn(ErrClosedUnexpectedly)
 	}
 
 	if _, ok := f.Header.Contains(frame.Receipt); ok {
@@ -548,12 +559,12 @@ func (c *Conn) sendFrame(f *frame.Frame) error {
 			response, ok = <-request.C
 		}
 
-		if ok {
-			if response.Command != frame.RECEIPT {
-				return newError(response)
-			}
-		} else {
+		if !ok {
 			return ErrClosedUnexpectedly
+		}
+
+		if response.Command != frame.RECEIPT {
+			return newError(response)
 		}
 	} else {
 		// no receipt required
@@ -567,6 +578,14 @@ func (c *Conn) sendFrame(f *frame.Frame) error {
 	return nil
 }
 
+func (c *Conn) tryCloseConn(e error) error {
+	if err := c.conn.Close(); err != nil {
+		log.Printf("%s: failed to close connection: %v", "sendFrame", err)
+		return fmt.Errorf("failed to close connection: %w, original error was: %v", err, e)
+	}
+	return e
+}
+
 // Subscribe creates a subscription on the STOMP server.
 // The subscription has a destination, and messages sent to that destination
 // will be received by this subscription. A subscription has a channel
@@ -575,8 +594,7 @@ func (c *Conn) Subscribe(destination string, ack AckMode, opts ...func(*frame.Fr
 	c.closeMutex.Lock()
 	defer c.closeMutex.Unlock()
 	if c.closed {
-		c.conn.Close()
-		return nil, ErrClosedUnexpectedly
+		return nil, c.tryCloseConn(ErrClosedUnexpectedly)
 	}
 
 	ch := make(chan *frame.Frame)
