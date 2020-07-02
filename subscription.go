@@ -78,7 +78,7 @@ func (s *Subscription) Unsubscribe(opts ...func(*frame.Frame) error) error {
 
 	err := s.conn.sendFrame(f)
 	if err != nil {
-		log.Printf("failed to send frame in unsubscribe")
+		log.Printf("failed to send frame in unsubscribe: %v", err)
 	}
 
 	// UNSUBSCRIBE is a bit weird in that it is tagged with a "receipt" header
