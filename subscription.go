@@ -120,7 +120,7 @@ func (s *Subscription) closeChannel(msg *Message) {
 	}
 	atomic.StoreInt32(&s.state, subStateClosed)
 	close(s.C)
-	s.closeChan <- struct{}{}
+	close(s.closeChan)
 }
 
 func (s *Subscription) readLoop(ch chan *frame.Frame) {
