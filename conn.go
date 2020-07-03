@@ -324,7 +324,7 @@ func processLoop(c *Conn, writer *frame.Writer) {
 
 				c.closeMutex.Lock()
 				defer c.closeMutex.Unlock()
-				c.closed = true
+				//c.closed = true
 				if err := c.tryCloseConn(ErrErrorFrame); err != nil {
 					// We do not need extra log.
 				}
@@ -579,6 +579,7 @@ func (c *Conn) sendFrame(f *frame.Frame) error {
 }
 
 func (c *Conn) tryCloseConn(e error) error {
+	c.closed = true
 	if err := c.conn.Close(); err != nil {
 		return fmt.Errorf("failed to close connection: %w, original error was: %v", err, e)
 	}
