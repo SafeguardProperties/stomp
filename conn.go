@@ -580,7 +580,6 @@ func (c *Conn) sendFrame(f *frame.Frame) error {
 
 func (c *Conn) tryCloseConn(e error) error {
 	if err := c.conn.Close(); err != nil {
-		log.Printf("%s: failed to close connection: %v", "sendFrame", err)
 		return fmt.Errorf("failed to close connection: %w, original error was: %v", err, e)
 	}
 	return e
