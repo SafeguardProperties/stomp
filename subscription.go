@@ -3,7 +3,6 @@ package stomp
 import (
 	"fmt"
 	"log"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -27,8 +26,6 @@ type Subscription struct {
 	conn        *Conn
 	ackMode     AckMode
 	state       int32
-	closeMutex  *sync.Mutex
-	closeCond   *sync.Cond
 	closeChan   chan struct{}
 }
 
@@ -98,11 +95,6 @@ func (s *Subscription) Unsubscribe(opts ...func(*frame.Frame) error) error {
 		log.Printf("timeout waiting for close")
 		return ErrUnsubscribeTimeout
 	}
-	//s.closeMutex.Lock()
-	//for atomic.LoadInt32(&s.state) != subStateClosed {
-	//	s.closeCond.Wait()
-	//}
-	//s.closeMutex.Unlock()
 }
 
 // Read a message from the subscription. This is a convenience
@@ -129,7 +121,6 @@ func (s *Subscription) closeChannel(msg *Message) {
 	atomic.StoreInt32(&s.state, subStateClosed)
 	close(s.C)
 	s.closeChan <- struct{}{}
-	//s.closeCond.Broadcast()
 }
 
 func (s *Subscription) readLoop(ch chan *frame.Frame) {
