@@ -5,6 +5,7 @@ import (
 	"log"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/go-stomp/stomp/frame"
 )
@@ -28,6 +29,7 @@ type Subscription struct {
 	state       int32
 	closeMutex  *sync.Mutex
 	closeCond   *sync.Cond
+	closeChan   chan struct{}
 }
 
 // BUG(jpj): If the client does not read messages from the Subscription.C
@@ -88,12 +90,19 @@ func (s *Subscription) Unsubscribe(opts ...func(*frame.Frame) error) error {
 	// We don't want to interfere with `s.C` since we might be "stealing"
 	// MESSAGEs or ERRORs from another goroutine, so use a sync.Cond to
 	// wait for the terminal state transition instead.
-	s.closeMutex.Lock()
-	for atomic.LoadInt32(&s.state) != subStateClosed {
-		s.closeCond.Wait()
+	select {
+	case <-s.closeChan:
+		return nil
+		//log.Printf("Got the go ahead to close this subscription")
+	case <-time.After(120 * time.Second):
+		log.Printf("timeout waiting for close")
+		return ErrUnsubscribeTimeout
 	}
-	s.closeMutex.Unlock()
-	return nil
+	//s.closeMutex.Lock()
+	//for atomic.LoadInt32(&s.state) != subStateClosed {
+	//	s.closeCond.Wait()
+	//}
+	//s.closeMutex.Unlock()
 }
 
 // Read a message from the subscription. This is a convenience
@@ -119,7 +128,8 @@ func (s *Subscription) closeChannel(msg *Message) {
 	}
 	atomic.StoreInt32(&s.state, subStateClosed)
 	close(s.C)
-	s.closeCond.Broadcast()
+	s.closeChan <- struct{}{}
+	//s.closeCond.Broadcast()
 }
 
 func (s *Subscription) readLoop(ch chan *frame.Frame) {

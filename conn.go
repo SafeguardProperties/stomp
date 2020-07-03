@@ -635,6 +635,7 @@ func (c *Conn) Subscribe(destination string, ack AckMode, opts ...func(*frame.Fr
 		C:           make(chan *Message, 16),
 		closeMutex:  closeMutex,
 		closeCond:   sync.NewCond(closeMutex),
+		closeChan:   make(chan struct{}),
 	}
 	go sub.readLoop(ch)
 

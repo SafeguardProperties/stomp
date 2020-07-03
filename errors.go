@@ -23,6 +23,7 @@ var (
 	ErrErrorFrame            = newErrorMessage("Errored Frame")
 	ErrMissingMessageId      = newErrorMessage("missing header: " + frame.MessageId)
 	ErrMissingAck            = newErrorMessage("missing header: " + frame.Ack)
+	ErrUnsubscribeTimeout    = newErrorMessage("timeout while waiting to unsubscribe")
 )
 
 // StompError implements the Error interface, and provides
