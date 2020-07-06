@@ -489,11 +489,11 @@ func sendDataToWriteChWithTimeout(ch chan writeRequest, request writeRequest, ti
 	}
 
 	timer := time.NewTimer(timeout)
+	defer timer.Stop()
 	select {
 	case <-timer.C:
 		return ErrMsgSendTimeout
 	case ch <- request:
-		timer.Stop()
 		return nil
 	}
 }
