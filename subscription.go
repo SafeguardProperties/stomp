@@ -87,11 +87,13 @@ func (s *Subscription) Unsubscribe(opts ...func(*frame.Frame) error) error {
 	// We don't want to interfere with `s.C` since we might be "stealing"
 	// MESSAGEs or ERRORs from another goroutine, so use a sync.Cond to
 	// wait for the terminal state transition instead.
+	timer := time.NewTimer(120 * time.Second)
+	defer timer.Stop()
 	select {
 	case <-s.closeChan:
 		return nil
 		//log.Printf("Got the go ahead to close this subscription")
-	case <-time.After(120 * time.Second):
+	case <-timer.C:
 		log.Printf("timeout waiting for close")
 		return ErrUnsubscribeTimeout
 	}
